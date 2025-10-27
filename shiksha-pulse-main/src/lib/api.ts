@@ -138,12 +138,12 @@ export const apiService = {
 export function transformStudentData(apiStudent: any): Student {
   return {
     id: apiStudent.student_id || apiStudent.id || '',
-    name: apiStudent.name || '',
-    department: apiStudent.department || '',
+    name: apiStudent.name || apiStudent.student_id || 'N/A',
+    department: apiStudent.department?.toString() || '',
     year: apiStudent.year || 1,
     riskLevel: apiStudent.risk_level?.toLowerCase() || 'low',
     engagementScore: Math.round(apiStudent.engagement_score || 0),
-    attendance: Math.round(apiStudent.attendance || 0),
+    attendance: Math.round(apiStudent.attendance || apiStudent.attendance_rate || 0),
     cgpa: apiStudent.cgpa || apiStudent.academic_performance || 0,
     creditsCompleted: apiStudent.credits_completed || 0,
     email: apiStudent.email || '',

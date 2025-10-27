@@ -11,20 +11,19 @@ import { apiService, transformStudentData } from "@/lib/api";
 
 export default function Students() {
   const [searchTerm, setSearchTerm] = useState("");
-  const [currentPage, setCurrentPage] = useState(1);
   const [riskFilter, setRiskFilter] = useState("");
   const [departmentFilter, setDepartmentFilter] = useState("");
   const navigate = useNavigate();
 
   const { data: studentsData, isLoading, error } = useQuery({
-    queryKey: ['students', searchTerm, riskFilter, departmentFilter, currentPage],
+    queryKey: ['students', searchTerm, riskFilter, departmentFilter],
     queryFn: async () => {
       const data = await apiService.getStudents({
         search: searchTerm || undefined,
         risk: riskFilter || undefined,
         department: departmentFilter || undefined,
-        page: currentPage,
-        per_page: 20
+        page: 1,
+        per_page: 10000  // Get all students
       });
       return {
         ...data,
@@ -71,13 +70,13 @@ export default function Students() {
         <CardHeader className="relative">
           <CardTitle className="text-2xl">Student List</CardTitle>
           <CardDescription>
-            View and search through all students
+            View and search through all students ({filteredStudents.length} students)
           </CardDescription>
           <div className="flex items-center gap-3 mt-6 relative">
             <div className="relative flex-1 max-w-md">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search by name, ID, or department..."
+                placeholder="Search by Student ID..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-10 h-12 bg-background/50 backdrop-blur-sm border-2 focus:border-primary transition-all duration-300"
@@ -87,14 +86,13 @@ export default function Students() {
         </CardHeader>
         
         <CardContent className="relative">
-          <div className="rounded-xl border-2 overflow-hidden bg-card/50 backdrop-blur-sm">
+          <div className="rounded-xl border-2 overflow-hidden bg-card/50 backdrop-blur-sm max-h-[70vh] overflow-y-auto">
             <Table>
               <TableHeader>
                 <TableRow className="hover:bg-muted/50">
                   <TableHead className="font-semibold">Student ID</TableHead>
-                  <TableHead className="font-semibold">Name</TableHead>
+                  <TableHead className="font-semibold">Gender</TableHead>
                   <TableHead className="font-semibold">Department</TableHead>
-                  <TableHead className="font-semibold">Year</TableHead>
                   <TableHead className="font-semibold">Risk Level</TableHead>
                   <TableHead className="font-semibold">Engagement Score</TableHead>
                   <TableHead className="text-right font-semibold">Actions</TableHead>
@@ -108,13 +106,20 @@ export default function Students() {
                     style={{ animationDelay: `${index * 50}ms` }}
                   >
                     <TableCell className="font-medium text-primary">{student.id}</TableCell>
-                    <TableCell className="font-medium">{student.name}</TableCell>
+                    <TableCell>
+                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
+                        student.gender === 'M' 
+                          ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' 
+                          : 'bg-pink-100 text-pink-800 dark:bg-pink-900 dark:text-pink-200'
+                      }`}>
+                        {student.gender}
+                      </span>
+                    </TableCell>
                     <TableCell>
                       <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-secondary">
                         {student.department}
                       </span>
                     </TableCell>
-                    <TableCell>Year {student.year}</TableCell>
                     <TableCell>
                       <RiskBadge level={student.riskLevel} />
                     </TableCell>
