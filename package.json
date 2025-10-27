@@ -3,6 +3,16 @@
   "version": "1.0.0",
   "description": "ML-based Student Engagement Prediction System for Higher Education",
   "main": "app.py",
+  "scripts": {
+    "setup": "python setup_complete.py",
+    "train": "python train_model.py",
+    "dev": "python app.py",
+    "build": "cd shiksha-pulse-main && npm run build:flask",
+    "install:frontend": "cd shiksha-pulse-main && npm install",
+    "install:backend": "pip install -r requirements.txt",
+    "install:all": "npm run install:backend && npm run install:frontend",
+    "clean": "rm -rf dist && rm -rf shiksha-pulse-main/node_modules"
+  },
   "dependencies": {
     "pandas": "^2.0.0",
     "numpy": "^1.24.0",
