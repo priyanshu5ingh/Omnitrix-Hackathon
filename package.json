@@ -1,0 +1,23 @@
+{
+  "name": "student-engagement-predictor",
+  "version": "1.0.0",
+  "description": "ML-based Student Engagement Prediction System for Higher Education",
+  "main": "app.py",
+  "dependencies": {
+    "pandas": "^2.0.0",
+    "numpy": "^1.24.0",
+    "scikit-learn": "^1.3.0",
+    "xgboost": "^1.7.0",
+    "flask": "^2.3.0",
+    "flask-cors": "^4.0.0",
+    "joblib": "^1.3.0",
+    "shap": "^0.42.0",
+    "matplotlib": "^3.7.0",
+    "seaborn": "^0.12.0",
+    "openpyxl": "^3.1.0"
+  },
+  "devDependencies": {
+    "jupyter": "^1.0.0",
+    "notebook": "^6.5.0"
+  }
+}

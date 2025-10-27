@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Student Engagement Prediction Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+
+        .header {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            padding: 1rem 2rem;
+            color: white;
+            box-shadow: 0 2px 20px rgba(0, 0, 0, 0.1);
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            text-align: center;
+            margin-bottom: 0.5rem;
+        }
+
+        .header p {
+            text-align: center;
+            opacity: 0.9;
+            font-size: 1.1rem;
+        }
+
+        .nav {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 1rem 2rem;
+            text-align: center;
+        }
+
+        .nav-links {
+            display: flex;
+            justify-content: center;
+            gap: 2rem;
+            flex-wrap: wrap;
+        }
+
+        .nav-link {
+            color: white;
+            text-decoration: none;
+            padding: 0.5rem 1rem;
+            border-radius: 25px;
+            transition: all 0.3s ease;
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .nav-link:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: translateY(-2px);
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 2rem auto;
+            padding: 0 2rem;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 3rem;
+            color: white;
+            font-size: 1.2rem;
+        }
+
+        .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top: 4px solid white;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 1rem;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .status {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            padding: 1rem;
+            border-radius: 10px;
+            margin: 1rem 0;
+            text-align: center;
+            color: white;
+        }
+
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1.5rem;
+            margin: 2rem 0;
+        }
+
+        .feature-card {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            padding: 1.5rem;
+            border-radius: 15px;
+            color: white;
+            transition: transform 0.3s ease;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .feature-card h3 {
+            color: #ffd700;
+            margin-bottom: 1rem;
+        }
+
+        .feature-card ul {
+            list-style: none;
+            padding: 0;
+        }
+
+        .feature-card li {
+            padding: 0.5rem 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .cta {
+            text-align: center;
+            margin: 3rem 0;
+        }
+
+        .cta-button {
+            background: linear-gradient(45deg, #ff6b6b, #ffa500);
+            color: white;
+            padding: 1rem 2rem;
+            border: none;
+            border-radius: 50px;
+            font-size: 1.2rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .cta-button:hover {
+            transform: scale(1.05);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        .footer {
+            text-align: center;
+            padding: 2rem;
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🎓 Student Engagement Predictor</h1>
+        <p>AI-Powered Early Warning System for Academic Success</p>
+    </div>
+
+    <div class="nav">
+        <div class="nav-links">
+            <a href="/" class="nav-link">🏠 Dashboard</a>
+            <a href="/upload" class="nav-link">📤 Batch Upload</a>
+            <a href="/api/advanced_analytics" class="nav-link">📈 Analytics</a>
+            <a href="/api/model_performance" class="nav-link">🎯 Model Performance</a>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="status">
+            <h3>🚀 System Status: Initializing...</h3>
+            <p>Loading ML models and preparing dashboard...</p>
+        </div>
+
+        <div class="features">
+            <div class="feature-card">
+                <h3>📊 Dashboard Analytics</h3>
+                <ul>
+                    <li>Real-time student engagement metrics</li>
+                    <li>Risk distribution visualization</li>
+                    <li>Department-wise performance analysis</li>
+                    <li>Historical trends and patterns</li>
+                </ul>
+            </div>
+
+            <div class="feature-card">
+                <h3>🔍 Student Search & Analysis</h3>
+                <ul>
+                    <li>Advanced student filtering</li>
+                    <li>Individual risk assessment</li>
+                    <li>Feature importance analysis</li>
+                    <li>Personalized recommendations</li>
+                </ul>
+            </div>
+
+            <div class="feature-card">
+                <h3>🎯 What-If Simulations</h3>
+                <ul>
+                    <li>Interactive scenario testing</li>
+                    <li>Real-time prediction updates</li>
+                    <li>Impact analysis tools</li>
+                    <li>Intervention planning</li>
+                </ul>
+            </div>
+
+            <div class="feature-card">
+                <h3>🤖 AI-Powered Insights</h3>
+                <ul>
+                    <li>SHAP-based explanations</li>
+                    <li>Predictive risk scoring</li>
+                    <li>Automated early warnings</li>
+                    <li>Data-driven recommendations</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="cta">
+            <p>🎯 Ready to predict student success and prevent academic disengagement?</p>
+            <a href="/api/dashboard" class="cta-button">Launch Dashboard</a>
+        </div>
+    </div>
+
+    <div class="footer">
+        <p>Built for Indian Higher Education Institutions | Powered by Machine Learning</p>
+        <p>Reducing academic disengagement through early intervention and predictive analytics</p>
+    </div>
+
+    <script>
+        // Simple status checker
+        setInterval(() => {
+            fetch('/api/dashboard')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.total_students) {
+                        document.querySelector('.status').innerHTML = `
+                            <h3>✅ System Ready!</h3>
+                            <p>Dashboard loaded with ${data.total_students} students</p>
+                        `;
+                    }
+                })
+                .catch(error => {
+                    console.log('Waiting for API...');
+                });
+        }, 2000);
+    </script>
+</body>
+</html>
