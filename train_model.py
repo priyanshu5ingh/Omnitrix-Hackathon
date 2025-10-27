@@ -38,23 +38,24 @@ class StudentEngagementPredictor:
             if df[col].dtype == 'object':
                 print(f"    - Unique values: {df[col].nunique()}")
 
-        print("
-📈 Missing values:"        print(df.isnull().sum()[df.isnull().sum() > 0])
+        print("📈 Missing values:", df.isnull().sum()[df.isnull().sum() > 0])
 
-        print("
-🎯 Identifying target variable..."        # Look for potential target variables
+        print("🎯 Identifying target variable..." )       # Look for potential target variables
         potential_targets = []
         for col in df.columns:
             if any(word in col.lower() for word in
-                   ['engage', 'drop', 'risk', 'performance', 'gpa', 'grade', 'status', 'complete', 'disengage']):
+                   ['engage', 'drop', 'risk', 'performance', 'gpa', 'grade', 'status', 'complete', 'disengage', 'dropout', 'fail']):
                 potential_targets.append(col)
 
-        if potential_targets:
+        # Check for dropout column specifically (common in student datasets)
+        if 'dropout' in df.columns:
+            self.target_column = 'dropout'
+        elif potential_targets:
             print(f"Potential target variables: {potential_targets}")
             # Assume first match is target (can be modified)
             self.target_column = potential_targets[0]
         else:
-            print("No obvious target variable found. Please specify manually.")
+            print("No obvious target variable found. Available columns:", list(df.columns))
             return None
 
         return df
@@ -85,14 +86,43 @@ class StudentEngagementPredictor:
                 self.label_encoders[col] = LabelEncoder()
             df[col] = self.label_encoders[col].fit_transform(df[col].astype(str))
 
-        # Create risk levels from engagement scores if needed
-        if 'engagement' in self.target_column.lower() or 'score' in self.target_column.lower():
-            # Convert numerical target to categorical risk levels
-            df['risk_level'] = pd.qcut(df[self.target_column], q=3,
-                                      labels=['Low', 'Medium', 'High'])
+        # Create risk levels from target variable
+        print(f"🎯 Target variable: {self.target_column}")
+        print(f"   Target unique values: {df[self.target_column].nunique()}")
+        print(f"   Target value counts: {df[self.target_column].value_counts().to_dict()}")
+
+        # Check if target is already categorical
+        if df[self.target_column].dtype in ['int64', 'float64'] and df[self.target_column].nunique() <= 10:
+            # Convert numerical target to categorical risk levels for display
+            if df[self.target_column].nunique() == 2:
+                # Binary classification - create string labels for display but keep numerical for training
+                df['risk_level'] = df[self.target_column].map({0: 'Low', 1: 'High'})
+                print("   Binary classification detected - using as dropout risk")
+            else:
+                # Multi-class numerical - use qcut for balanced classes
+                try:
+                    df['risk_level'] = pd.qcut(df[self.target_column], q=min(3, df[self.target_column].nunique()),
+                                              labels=['Low', 'Medium', 'High'][:min(3, df[self.target_column].nunique())],
+                                              duplicates='drop')
+                    print(f"   Converted to {df['risk_level'].nunique()} risk levels using quantiles")
+                except ValueError as e:
+                    print(f"   Warning: qcut failed ({e}), using direct mapping")
+                    df['risk_level'] = df[self.target_column].astype(str)
+        else:
+            # Target is already categorical
+            df['risk_level'] = df[self.target_column]
+            print(f"   Using categorical target directly ({df['risk_level'].nunique()} classes)")
+
+        # For training, we need numerical labels, so encode the risk_level
+        self.label_encoders['risk_level'] = LabelEncoder()
+        df['risk_level_encoded'] = self.label_encoders['risk_level'].fit_transform(df['risk_level'])
+
+        # Store engagement score for reference (if target is numerical)
+        if df[self.target_column].dtype in ['int64', 'float64']:
             df['engagement_score'] = df[self.target_column]
         else:
-            df['risk_level'] = df[self.target_column]
+            # For categorical targets, create a numerical engagement score
+            df['engagement_score'] = df['risk_level'].map({'Low': 85, 'Medium': 65, 'High': 35}).fillna(50)
 
         # Feature engineering
         df = self.create_features(df)
@@ -117,15 +147,33 @@ class StudentEngagementPredictor:
         if grade_cols:
             df['academic_performance'] = df[grade_cols[0]]
 
+        # Study behavior features
+        study_cols = [col for col in numerical_cols if any(word in col.lower()
+                     for word in ['study', 'hour', 'time'])]
+        if study_cols:
+            df['study_intensity'] = df[study_cols[0]]
+
+        # Assignment/project features
+        assignment_cols = [col for col in numerical_cols if any(word in col.lower()
+                          for word in ['assignment', 'project', 'submit'])]
+        if assignment_cols:
+            df['assignment_completion'] = df[assignment_cols[0]]
+
+        # Activity features
+        activity_cols = [col for col in numerical_cols if 'activit' in col.lower()]
+        if activity_cols:
+            df['activity_participation'] = df[activity_cols[0]]
+
         # Create interaction features
         if 'attendance_rate' in df.columns and 'academic_performance' in df.columns:
             df['attendance_performance_interaction'] = df['attendance_rate'] * df['academic_performance']
 
-        # Socio-economic indicators (if available)
-        socio_cols = [col for col in df.columns if any(word in col.lower()
-                     for word in ['income', 'economic', 'financial', 'family', 'background'])]
-        if socio_cols:
-            df['socio_economic_score'] = df[socio_cols].mean(axis=1)
+        if 'study_intensity' in df.columns and 'assignment_completion' in df.columns:
+            df['study_assignment_interaction'] = df['study_intensity'] * df['assignment_completion']
+
+        # Risk indicators
+        if 'past_failures' in df.columns:
+            df['failure_risk'] = df['past_failures'] > 0
 
         return df
 
@@ -135,14 +183,17 @@ class StudentEngagementPredictor:
 
         # Prepare features and target
         feature_cols = [col for col in df.columns if col not in
-                       ['risk_level', self.target_column, 'engagement_score', 'student_id', 'name']]
+                       ['risk_level', 'risk_level_encoded', self.target_column, 'engagement_score', 'student_id', 'name']]
 
         # Remove columns with low variance
         feature_cols = [col for col in feature_cols if df[col].std() > 0.01]
 
         self.feature_columns = feature_cols
         X = df[feature_cols]
-        y = df['risk_level']
+        y = df['risk_level_encoded']  # Use encoded numerical labels for training
+
+        print(f"🎯 Using {len(feature_cols)} features for training")
+        print(f"📊 Target distribution: {df['risk_level'].value_counts().to_dict()}")
 
         # Split data
         X_train, X_test, y_train, y_test = train_test_split(
@@ -156,18 +207,30 @@ class StudentEngagementPredictor:
 
         # Train model
         if model_type.lower() == 'xgboost':
+            # Calculate class weights for imbalanced data
+            class_counts = y_train.value_counts()
+            total_samples = len(y_train)
+            class_weights = total_samples / (len(class_counts) * class_counts)
+
             self.model = xgb.XGBClassifier(
                 n_estimators=100,
                 max_depth=6,
                 learning_rate=0.1,
                 random_state=42,
-                eval_metric='mlogloss'
+                eval_metric='logloss',
+                scale_pos_weight=class_weights[1] / class_weights[0]  # Weight for positive class
             )
         elif model_type.lower() == 'randomforest':
+            # Calculate class weights for Random Forest
+            class_counts = y_train.value_counts()
+            total_samples = len(y_train)
+            class_weights = total_samples / (len(class_counts) * class_counts)
+
             self.model = RandomForestClassifier(
                 n_estimators=100,
                 max_depth=10,
-                random_state=42
+                random_state=42,
+                class_weight='balanced'
             )
         else:
             self.model = RandomForestClassifier(n_estimators=100, random_state=42)
@@ -180,10 +243,10 @@ class StudentEngagementPredictor:
         test_score = self.model.score(X_test_scaled, y_test)
 
         print(f"📊 Training accuracy: {train_score:.3f}")
-".3f"test_score:.3f"
+        print(f"📊 Test accuracy: {test_score:.3f}")
         # Cross-validation
         cv_scores = cross_val_score(self.model, X_train_scaled, y_train, cv=5)
-        print(f"🔍 Cross-validation scores: {cv_scores.mean():.3f} (+/- {cv_scores.std() * 2:".3f"")
+        print(f"🔍 Cross-validation scores: {cv_scores.mean():.3f} (+/- {cv_scores.std() * 2:.3f})")
 
         # Feature importance
         self.plot_feature_importance()
@@ -204,12 +267,15 @@ class StudentEngagementPredictor:
             # Create SHAP explainer
             self.explainer = shap.TreeExplainer(self.model)
 
+            # Ensure data is in the right format for SHAP
+            X_train_sample = X_train[:1000]  # Use smaller sample for SHAP
+
             # Calculate SHAP values for training data
-            shap_values = self.explainer.shap_values(X_train)
+            shap_values = self.explainer.shap_values(X_train_sample)
 
             # Create SHAP summary plot
             plt.figure(figsize=(12, 8))
-            shap.summary_plot(shap_values, X_train,
+            shap.summary_plot(shap_values, X_train_sample,
                             feature_names=feature_names, show=False)
             plt.savefig('shap_summary.png', dpi=300, bbox_inches='tight')
             plt.close()
@@ -217,8 +283,14 @@ class StudentEngagementPredictor:
             # Create SHAP waterfall plot for a sample prediction
             sample_idx = 0
             plt.figure(figsize=(10, 6))
-            shap.plots.waterfall(self.explainer.expected_value, shap_values[sample_idx],
-                               X_train[sample_idx], feature_names=feature_names, show=False)
+            if isinstance(shap_values, list) and len(shap_values) > 1:
+                # Multi-class case
+                shap.plots.waterfall(self.explainer.expected_value[1], shap_values[1][sample_idx],
+                                   X_train_sample[sample_idx], feature_names=feature_names, show=False)
+            else:
+                # Binary case
+                shap.plots.waterfall(self.explainer.expected_value, shap_values[sample_idx],
+                                   X_train_sample[sample_idx], feature_names=feature_names, show=False)
             plt.savefig('shap_waterfall.png', dpi=300, bbox_inches='tight')
             plt.close()
 
@@ -226,6 +298,7 @@ class StudentEngagementPredictor:
 
         except Exception as e:
             print(f"⚠️  SHAP analysis failed: {e}")
+            print("   Continuing without SHAP analysis...")
             self.explainer = None
 
     def plot_feature_importance(self):
