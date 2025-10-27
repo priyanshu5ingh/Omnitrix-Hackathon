@@ -39,6 +39,7 @@ EMAIL_CONFIG = {
 model = None
 feature_columns = None
 scaler = None
+explainer = None
 
 # Create necessary directories
 os.makedirs('uploads', exist_ok=True)
@@ -104,16 +105,17 @@ def get_students():
         page = int(request.args.get('page', 1))
         per_page = int(request.args.get('per_page', 20))
 
-        # Apply filters
+        # Apply filters - search only on student_id since name doesn't exist
         if search:
-            df = df[df['name'].str.contains(search, case=False, na=False) |
-                   df['student_id'].str.contains(search, case=False, na=False)]
+            df = df[df['student_id'].astype(str).str.contains(search, case=False, na=False)]
 
         if risk_filter:
-            df = df[df['risk_level'] == risk_filter]
+            # Handle case sensitivity
+            df = df[df['risk_level'].str.lower() == risk_filter.lower()]
 
         if department:
-            df = df[df['department'] == department]
+            # Department is numeric in the data
+            df = df[df['department'].astype(str) == str(department)]
 
         # Pagination
         start_idx = (page - 1) * per_page
@@ -209,13 +211,17 @@ def simulate():
             return jsonify({'error': 'Student not found'}), 404
 
         # Apply modifications
+        student_dict = student_data.iloc[0].to_dict()
         for feature, value in modifications.items():
-            if feature in student_data.columns:
-                student_data[feature] = value
+            if feature in student_dict:
+                student_dict[feature] = value
+        
+        # Convert back to DataFrame
+        student_df = pd.DataFrame([student_dict])
 
         # Make prediction with modified data
         if model:
-            processed_data = preprocess_data(student_data)
+            processed_data = preprocess_data(student_df)
             prediction = model.predict(processed_data)
             probability = model.predict_proba(processed_data)
 
@@ -339,39 +345,58 @@ def advanced_analytics():
             risk_over_time = df.groupby([pd.to_datetime(df['timestamp']).dt.date, 'risk_level']).size().unstack()
             charts['risk_over_time'] = risk_over_time.to_dict()
 
-        # 2. Feature correlation heatmap
+        # 2. Feature correlation heatmap (use only relevant numeric columns)
         numeric_cols = df.select_dtypes(include=[np.number]).columns
-        correlation_matrix = df[numeric_cols].corr()
+        # Exclude columns that aren't useful for correlation
+        exclude_cols = ['student_id', 'risk_level_encoded', 'failure_risk']
+        numeric_cols = [col for col in numeric_cols if col not in exclude_cols]
+        
+        if len(numeric_cols) > 1:
+            correlation_matrix = df[numeric_cols].corr()
 
-        # Create heatmap
-        fig = go.Figure(data=go.Heatmap(
-            z=correlation_matrix.values,
-            x=correlation_matrix.columns,
-            y=correlation_matrix.columns,
-            colorscale='RdBu'
-        ))
-        charts['correlation_heatmap'] = json.loads(fig.to_json())
+            # Create heatmap
+            fig = go.Figure(data=go.Heatmap(
+                z=correlation_matrix.values,
+                x=correlation_matrix.columns,
+                y=correlation_matrix.columns,
+                colorscale='RdBu'
+            ))
+            charts['correlation_heatmap'] = json.loads(fig.to_json())
 
         # 3. Department-wise performance
         if 'department' in df.columns:
-            dept_performance = df.groupby('department').agg({
-                'engagement_score': 'mean',
-                'attendance': 'mean',
-                'risk_level': lambda x: (x == 'High').mean() * 100
-            }).round(2)
+            try:
+                dept_performance = df.groupby('department').agg({
+                    'engagement_score': 'mean',
+                    'attendance_rate': 'mean',
+                    'risk_level': lambda x: (x == 'High').mean() * 100
+                }).round(2).reset_index()
 
-            fig = px.bar(dept_performance, y='engagement_score',
-                       title='Average Engagement Score by Department')
-            charts['department_performance'] = json.loads(fig.to_json())
+                # Create bar chart
+                fig = px.bar(dept_performance, x='department', y='engagement_score',
+                           title='Average Engagement Score by Department')
+                charts['department_performance'] = json.loads(fig.to_json())
+                
+                # Also provide raw data for table display
+                charts['department_data'] = dept_performance.to_dict('records')
+            except Exception as e:
+                print(f"Error creating department performance: {e}")
 
         # 4. Risk factors analysis
-        risk_factors = analyze_risk_factors(df)
-        charts['risk_factors'] = risk_factors
+        try:
+            risk_factors = analyze_risk_factors(df)
+            charts['risk_factors'] = risk_factors
+        except Exception as e:
+            print(f"Error analyzing risk factors: {e}")
+            charts['risk_factors'] = {}
 
         return jsonify(charts)
 
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"Advanced analytics error: {error_details}")
+        return jsonify({'error': str(e), 'details': error_details}), 500
 
 @app.route('/api/send_alert', methods=['POST'])
 def send_alert():
@@ -405,8 +430,15 @@ def model_performance():
         df = pd.read_csv('data/processed_data.csv')
 
         # Split features and target
+        # Use risk_level_encoded for numeric target, convert risk_level to numeric if needed
+        if 'risk_level_encoded' in df.columns:
+            y = df['risk_level_encoded']
+        else:
+            # Convert string risk_level to numeric for metrics
+            label_encoders = joblib.load('models/label_encoders.pkl')
+            y = label_encoders['risk_level'].transform(df['risk_level'])
+        
         X = df[feature_columns]
-        y = df['risk_level']
 
         # Scale features
         X_scaled = scaler.transform(X)
@@ -428,21 +460,33 @@ def model_performance():
         else:
             feature_imp = []
 
+        # Calculate accuracy
+        accuracy = (predictions == y).sum() / len(y) * 100
+        
         return jsonify({
             'classification_report': report,
             'confusion_matrix': conf_matrix.tolist(),
             'feature_importance': feature_imp[:10],
-            'model_accuracy': model.score(X_scaled, y)
+            'model_accuracy': accuracy
         })
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 def preprocess_data(df):
-    """Preprocess input data for prediction"""
-    # This function should match the preprocessing done during training
-    # For now, return as-is - will be implemented with actual preprocessing logic
-    return df
+    df = df.copy()
+    # Example: fill missing values
+    df.fillna(0, inplace=True)
+    # Ensure all required columns exist
+    for col in feature_columns:
+        if col not in df.columns:
+            df[col] = 0
+    # Select only the feature columns
+    df_selected = df[feature_columns]
+    # Scale
+    df_scaled = scaler.transform(df_selected)
+    return df_scaled
+
 
 def get_feature_importance(student_data):
     """Calculate feature importance for a student"""
@@ -464,12 +508,18 @@ def process_batch_predictions(filepath):
             df = pd.read_excel(filepath)
 
         # Preprocess data (using global feature_columns)
-        processed_data = preprocess_data(df)
-        processed_data = processed_data.reindex(columns=feature_columns, fill_value=0)
-
-        # Make predictions
-        predictions = model.predict(scaler.transform(processed_data))
-        probabilities = model.predict_proba(scaler.transform(processed_data))
+        # First ensure data has all required columns
+        for col in feature_columns:
+            if col not in df.columns:
+                df[col] = 0
+        
+        # Select only the feature columns
+        processed_data = df[feature_columns]
+        
+        # Scale and make predictions
+        scaled_data = scaler.transform(processed_data)
+        predictions = model.predict(scaled_data)
+        probabilities = model.predict_proba(scaled_data)
 
         # Format results
         results = []
@@ -495,22 +545,42 @@ def analyze_risk_factors(df):
     high_risk = df[df['risk_level'] == 'High']
 
     # Average metrics by risk level
-    risk_analysis = df.groupby('risk_level').agg({
-        'attendance': 'mean',
+    agg_dict = {
         'engagement_score': 'mean',
-        'academic_performance': 'mean'
-    }).round(2)
-
-    risk_factors['metrics_by_risk'] = risk_analysis.to_dict()
+    }
+    
+    # Add metrics that exist in the dataframe
+    if 'attendance_rate' in df.columns:
+        agg_dict['attendance_rate'] = 'mean'
+    elif 'attendance' in df.columns:
+        agg_dict['attendance'] = 'mean'
+        
+    if 'academic_performance' in df.columns:
+        agg_dict['academic_performance'] = 'mean'
+    
+    try:
+        risk_analysis = df.groupby('risk_level').agg(agg_dict).round(2)
+        risk_factors['metrics_by_risk'] = risk_analysis.to_dict()
+    except Exception as e:
+        print(f"Error in risk analysis: {e}")
+        risk_factors['metrics_by_risk'] = {}
 
     # Top risk indicators
     numeric_cols = df.select_dtypes(include=[np.number]).columns
+    # Exclude non-meaningful columns
+    exclude_cols = ['student_id', 'risk_level_encoded', 'failure_risk', 'dropout']
+    numeric_cols = [col for col in numeric_cols if col not in exclude_cols]
+    
     risk_correlations = {}
 
     for col in numeric_cols:
         if col != 'engagement_score':
-            correlation = df['engagement_score'].corr(df[col])
-            risk_correlations[col] = abs(correlation)
+            try:
+                correlation = df['engagement_score'].corr(df[col])
+                if not np.isnan(correlation):
+                    risk_correlations[col] = abs(correlation)
+            except:
+                pass
 
     # Sort by correlation strength
     top_factors = sorted(risk_correlations.items(), key=lambda x: x[1], reverse=True)[:10]
