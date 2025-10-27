@@ -573,13 +573,18 @@ def load_model():
         try:
             explainer = joblib.load('models/shap_explainer.pkl')
             print("✅ SHAP explainer loaded successfully")
-        except:
+        except Exception as e:
+            print(f"⚠️  SHAP explainer loading failed: {e}")
             # Create new SHAP explainer if not saved
-            sample_data = pd.read_csv('data/processed_data.csv')
-            sample_X = sample_data[feature_columns]
-            sample_X_scaled = scaler.transform(sample_X)
-            explainer = shap.TreeExplainer(model)
-            print("✅ New SHAP explainer created")
+            try:
+                sample_data = pd.read_csv('data/processed_data.csv')
+                sample_X = sample_data[feature_columns]
+                sample_X_scaled = scaler.transform(sample_X)
+                explainer = shap.TreeExplainer(model)
+                print("✅ New SHAP explainer created")
+            except Exception as e:
+                print(f"⚠️  Could not create SHAP explainer: {e}")
+                explainer = None
 
     except Exception as e:
         print(f"⚠️  Warning: Could not load model: {e}")
